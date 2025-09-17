@@ -3,9 +3,9 @@ version: 2.1
 jobs:
   generate-schema:
     docker:
-      - image: cimg/python:3.10  # CircleCI Python image
+      - image: cimg/python:3.10  
     steps:
-      - checkout  # pulls your code
+      - checkout  
       - run:
           name: Install dependencies
           command: |
