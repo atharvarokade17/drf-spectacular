@@ -1,0 +1,34 @@
+version: 2.1
+
+jobs:
+  generate-schema:
+    docker:
+      - image: cimg/python:3.10  # CircleCI Python image
+    steps:
+      - checkout  # pulls your code
+      - run:
+          name: Install dependencies
+          command: |
+            python -m venv venv
+            . venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
+      - run:
+          name: Run migrations
+          command: |
+            . venv/bin/activate
+            python manage.py migrate
+      - run:
+          name: Generate OpenAPI schema
+          command: |
+            . venv/bin/activate
+            python manage.py spectacular --file schema.yaml
+      - store_artifacts:
+          path: schema.yaml
+          destination: schema.yaml
+
+workflows:
+  version: 2
+  generate-docs:
+    jobs:
+      - generate-schema
