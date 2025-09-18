@@ -10,17 +10,9 @@ jobs:
           fingerprints:
             - $GITHUB_SSH_FINGERPRINT
       - run:
-          name: Set up Python
+          name: Set up Dev Environment
           command: |
-            python -m venv venv
-            . venv/bin/activate
-            pip install --upgrade pip
-            pip install -r requirements.txt
-      - run:
-          name: Migrate Database
-          command: |
-            . venv/bin/activate
-            python manage.py migrate
+            make dev
       - run:
           name: Generate schema.yaml
           command: |
