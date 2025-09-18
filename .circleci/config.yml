@@ -40,14 +40,14 @@ jobs:
       - run:
           name: Copy schema.yaml to EC2
           command: |
-            ssh -o StrictHostKeyChecking=no ubuntu@<EC2-PUBLIC-IP> "mkdir -p /home/ubuntu/swagger"
-            scp -o StrictHostKeyChecking=no schema.yaml ubuntu@<EC2-PUBLIC-IP>:/home/ubuntu/swagger/schema.yaml
+            ssh -o StrictHostKeyChecking=no ubuntu@13.127.199.8 "mkdir -p /home/ubuntu/swagger"
+            scp -o StrictHostKeyChecking=no schema.yaml ubuntu@13.127.199.8:/home/ubuntu/swagger/schema.yaml
 
       # Run Swagger UI Docker container on EC2
       - run:
           name: Start Swagger UI
           command: |
-            ssh -o StrictHostKeyChecking=no ubuntu@<EC2-PUBLIC-IP> "
+            ssh -o StrictHostKeyChecking=no ubuntu@13.127.199.8 "
               docker rm -f swagger-ui || true &&
               docker run -d -p 8080:8080 \
                 -e SWAGGER_JSON=/schema.yaml \
