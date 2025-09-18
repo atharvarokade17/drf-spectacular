@@ -11,7 +11,7 @@ jobs:
       # Add SSH key for EC2 access
       - add_ssh_keys:
           fingerprints:
-            - "<YOUR-SSH-FINGERPRINT>"  # Replace with your CircleCI SSH key fingerprint
+            - "SHA256:Tk0ytmU5TINUYGptlcwxJLPXIdkxAiVAc5fV2Lz5USM"  # Replace with your CircleCI SSH key fingerprint
 
       # Setup Python environment and install dependencies
       - run:
