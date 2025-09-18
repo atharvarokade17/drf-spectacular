@@ -40,3 +40,4 @@ workflows:
   generate-and-deploy-schema:
     jobs:
       - build
+      
