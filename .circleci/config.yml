@@ -32,4 +32,3 @@ workflows:
   generate-docs:
     jobs:
       - generate-schema
-      
