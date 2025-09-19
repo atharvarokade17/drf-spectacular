@@ -17,17 +17,18 @@ jobs:
           name: Generate Schema
           command: make dev
       - run:
-          name: Upload schema and Start Swagger UI via single SSM command (with traps like docker deploy)
+          name: Execute SSM command to upload schema and start Swagger UI
           command: |
             FILE_CONTENT=$(base64 -w 0 schema.yaml)
             command_id=$(aws ssm send-command \
               --instance-ids "$EC2_INSTANCE_ID" \
               --document-name "AWS-RunShellScript" \
               --comment "Upload schema.yaml and start Swagger UI" \
-              --parameters 'commands=[
+              --parameters commands='[
                 "set -e",
                 "trap '\''echo SCHEMA_UPLOAD_FAILURE 1>&2'\'' ERR; mkdir -p /home/ubuntu/swagger && echo '"$FILE_CONTENT"' | base64 -d > /home/ubuntu/swagger/schema.yaml",
-                "trap '\''echo SWAGGER_START_FAILURE 1>&2'\'' ERR; docker rm -f swagger-ui || true && docker run -d -p 8080:8080 -e SWAGGER_JSON=/schema.yaml -v /home/ubuntu/swagger/schema.yaml:/schema.yaml --name swagger-ui swaggerapi/swagger-ui"
+                "trap '\''echo SWAGGER_START_FAILURE 1>&2'\'' ERR; docker rm -f swagger-ui || true",
+                "trap '\''echo SWAGGER_START_FAILURE 1>&2'\'' ERR; docker run -d -p 8080:8080 -e SWAGGER_JSON=/schema.yaml -v /home/ubuntu/swagger/schema.yaml:/schema.yaml --name swagger-ui swaggerapi/swagger-ui"
               ]' \
               --region $AWS_REGION \
               --query 'Command.CommandId' --output text)
@@ -36,7 +37,7 @@ jobs:
             echo "export command_id=$command_id" >> $BASH_ENV
 
       - run:
-          name: Wait for schema upload and Swagger UI startup
+          name: Wait for SSM command execution
           command: |
             aws ssm wait command-executed \
               --command-id $command_id \
@@ -57,13 +58,9 @@ jobs:
             echo "Standard Error: $stderr"
 
             if [ "$status" != "Success" ]; then
-              if [[ "$stderr" == *"SCHEMA_UPLOAD_FAILURE"* ]]; then
-                echo "❌ Schema upload failed"
-              elif [[ "$stderr" == *"SWAGGER_START_FAILURE"* ]]; then
-                echo "❌ Swagger UI startup failed"
-              fi
+              echo "Schema upload or Swagger UI startup failed"
               exit 1
-            fi  
+            fi
 
 workflows:
   version: 2
