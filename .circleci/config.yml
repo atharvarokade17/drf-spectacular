@@ -20,8 +20,6 @@ jobs:
           name: Upload schema and Start Swagger UI via single SSM command
           command: |
             FILE_CONTENT=$(base64 -w 0 schema.yaml)
-
-            # Send a single SSM command to handle both schema upload and Swagger UI startup
             command_id=$(aws ssm send-command \
               --instance-ids "$EC2_INSTANCE_ID" \
               --document-name "AWS-RunShellScript" \
@@ -49,20 +47,16 @@ jobs:
               --command-id $command_id \
               --instance-id "$EC2_INSTANCE_ID" \
               --region $AWS_REGION || true
-
             ssm_output=$(aws ssm get-command-invocation \
               --command-id $command_id \
               --instance-id "$EC2_INSTANCE_ID" \
               --region $AWS_REGION)
-
             status=$(echo "$ssm_output" | jq -r '.Status')
             stdout=$(echo "$ssm_output" | jq -r '.StandardOutputContent')
             stderr=$(echo "$ssm_output" | jq -r '.StandardErrorContent')
-
             echo "Status: $status"
             echo "Standard Output: $stdout"
             echo "Standard Error: $stderr"
-
             if [ "$status" != "Success" ]; then
               echo "Schema upload or Swagger UI startup failed"
               exit 1
