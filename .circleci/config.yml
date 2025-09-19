@@ -19,21 +19,27 @@ jobs:
           name: Generate Schema
           command: make dev
       - run:
-          name: Upload schema and Start Swagger UI via SSM (with traps)
+          name: Upload schema and Start Swagger UI via SSM (with trap)
           command: |
             FILE_CONTENT=$(base64 -w 0 schema.yaml)
             command_id=$(aws ssm send-command \
               --instance-ids "$EC2_INSTANCE_ID" \
               --document-name "AWS-RunShellScript" \
               --comment "Upload schema.yaml and start Swagger UI" \
-              --parameters 'commands=[
+              --parameters commands='[
                 "set -e",
-                "trap '\''echo SCHEMA_UPLOAD_FAILURE 1>&2'\'' ERR; mkdir -p /home/ubuntu/swagger && echo '"$FILE_CONTENT"' | base64 -d > /home/ubuntu/swagger/schema.yaml",
+                "trap '\''echo SCHEMA_UPLOAD_FAILURE 1>&2'\'' ERR; mkdir -p /home/ubuntu/swagger",
+                "trap '\''echo FILE_WRITE_FAILURE 1>&2'\'' ERR; echo '"$FILE_CONTENT"' | base64 -d > /home/ubuntu/swagger/schema.yaml",
                 "trap '\''echo SWAGGER_REMOVE_FAILURE 1>&2'\'' ERR; docker rm -f swagger-ui || true",
-                "trap '\''echo SWAGGER_START_FAILURE 1>&2'\'' ERR; docker run -d -p 8080:8080 -e SWAGGER_JSON=/schema.yaml -v /home/ubuntu/swagger/schema.yaml:/schema.yaml --name swagger-ui swaggerapi/swagger-ui"
+                "trap '\''echo SWAGGER_START_FAILURE 1>&2'\'' ERR; docker run -d -p 8080:8080 \
+                  -e SWAGGER_JSON=/schema.yaml \
+                  -v /home/ubuntu/swagger/schema.yaml:/schema.yaml \
+                  --name swagger-ui \
+                  swaggerapi/swagger-ui"
               ]' \
               --region "$AWS_REGION" \
               --query 'Command.CommandId' --output text)
+
             echo "Command ID: $command_id"
             echo "export command_id=$command_id" >> $BASH_ENV
 
@@ -59,7 +65,15 @@ jobs:
             echo "Standard Error: $stderr"
 
             if [ "$status" != "Success" ]; then
-              echo "Schema upload or Swagger UI startup failed"
+              if [[ "$stderr" == *"SCHEMA_UPLOAD_FAILURE"* ]]; then
+                echo "❌ Schema upload failed"
+              elif [[ "$stderr" == *"FILE_WRITE_FAILURE"* ]]; then
+                echo "❌ Failed writing schema.yaml"
+              elif [[ "$stderr" == *"SWAGGER_REMOVE_FAILURE"* ]]; then
+                echo "❌ Failed removing old Swagger UI container"
+              elif [[ "$stderr" == *"SWAGGER_START_FAILURE"* ]]; then
+                echo "❌ Swagger UI startup failed"
+              fi
               exit 1
             fi
 
