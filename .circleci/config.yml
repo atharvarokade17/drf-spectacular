@@ -29,9 +29,9 @@ jobs:
               --parameters 'commands=[
                 "set -e",
                 "mkdir -p /home/ubuntu/swagger",
-                "echo '"$FILE_CONTENT"' | base64 -d > /home/ubuntu/swagger/schema.yaml",
-                "docker rm -f swagger-ui || true",
-                "docker run -d -p 8080:8080 \
+                "trap '\''echo SCHEMA_UPLOAD_FAILURE 1>&2'\'' ERR; echo '"$FILE_CONTENT"' | base64 -d > /home/ubuntu/swagger/schema.yaml",
+                "trap '\''echo DOCKER_REMOVE_FAILURE 1>&2'\'' ERR; docker rm -f swagger-ui || true",
+                "trap '\''echo SWAGGER_UI_START_FAILURE 1>&2'\'' ERR; docker run -d -p 8080:8080 \
                   -e SWAGGER_JSON=/schema.yaml \
                   -v /home/ubuntu/swagger/schema.yaml:/schema.yaml \
                   --name swagger-ui \
