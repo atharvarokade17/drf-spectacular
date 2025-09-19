@@ -29,16 +29,16 @@ jobs:
               --comment "Upload schema.yaml and start Swagger UI" \
               --parameters "commands=[
                 \"bash -c 'set -e;
-                  trap \\\"echo SCHEMA_UPLOAD_FAILURE 1>&2\\\" ERR;
+                  trap 'echo SCHEMA_UPLOAD_FAILURE 1>&2' ERR;
                   mkdir -p /home/ubuntu/swagger;
-                  echo \\\"$FILE_CONTENT\\\" | base64 -d > /home/ubuntu/swagger/schema.yaml;
+                  echo '$FILE_CONTENT' | base64 -d > /home/ubuntu/swagger/schema.yaml;
 
-                  trap \\\"echo DOCKER_REMOVE_FAILURE 1>&2\\\" ERR;
+                  trap 'echo DOCKER_REMOVE_FAILURE 1>&2' ERR;
                   docker rm -f swagger-ui || true;
 
-                  trap \\\"echo SWAGGER_UI_START_FAILURE 1>&2\\\" ERR;
+                  trap 'echo SWAGGER_UI_START_FAILURE 1>&2' ERR;
                   docker run -d -p 8080:8080 -e SWAGGER_JSON=/schema.yaml -v /home/ubuntu/swagger/schema.yaml:/schema.yaml --name swagger-ui swaggerapi/swagger-ui
-                '\" 
+                '\"
               ]" \
               --region "$AWS_REGION" \
               --query 'Command.CommandId' --output text)
@@ -68,7 +68,6 @@ jobs:
             if [ "$status" != "Success" ]; then
               echo "Schema upload or Swagger UI startup failed"
               exit 1
-            fi  
 
 workflows:
   version: 2
