@@ -19,7 +19,7 @@ jobs:
           name: Generate Schema
           command: make dev
       - run:
-          name: Upload schema and Start Swagger UI via SSM
+          name: Upload schema and Start Swagger UI via SSM (with traps)
           command: |
             FILE_CONTENT=$(base64 -w 0 schema.yaml)
             command_id=$(aws ssm send-command \
@@ -28,19 +28,15 @@ jobs:
               --comment "Upload schema.yaml and start Swagger UI" \
               --parameters 'commands=[
                 "set -e",
-                "mkdir -p /home/ubuntu/swagger",
-                "echo '"$FILE_CONTENT"' | base64 -d > /home/ubuntu/swagger/schema.yaml",
-                "docker rm -f swagger-ui || true",
-                "docker run -d -p 8080:8080 \
-                  -e SWAGGER_JSON=/schema.yaml \
-                  -v /home/ubuntu/swagger/schema.yaml:/schema.yaml \
-                  --name swagger-ui \
-                  swaggerapi/swagger-ui"
+                "trap '\''echo SCHEMA_UPLOAD_FAILURE 1>&2'\'' ERR; mkdir -p /home/ubuntu/swagger && echo '"$FILE_CONTENT"' | base64 -d > /home/ubuntu/swagger/schema.yaml",
+                "trap '\''echo SWAGGER_REMOVE_FAILURE 1>&2'\'' ERR; docker rm -f swagger-ui || true",
+                "trap '\''echo SWAGGER_START_FAILURE 1>&2'\'' ERR; docker run -d -p 8080:8080 -e SWAGGER_JSON=/schema.yaml -v /home/ubuntu/swagger/schema.yaml:/schema.yaml --name swagger-ui swaggerapi/swagger-ui"
               ]' \
               --region "$AWS_REGION" \
               --query 'Command.CommandId' --output text)
             echo "Command ID: $command_id"
             echo "export command_id=$command_id" >> $BASH_ENV
+
       - run:
           name: Wait for SSM Command to Complete
           command: |
@@ -48,16 +44,20 @@ jobs:
               --command-id $command_id \
               --instance-id "$EC2_INSTANCE_ID" \
               --region "$AWS_REGION" || true
+
             ssm_output=$(aws ssm get-command-invocation \
               --command-id $command_id \
               --instance-id "$EC2_INSTANCE_ID" \
               --region "$AWS_REGION")
+
             status=$(echo "$ssm_output" | jq -r '.Status')
             stdout=$(echo "$ssm_output" | jq -r '.StandardOutputContent')
             stderr=$(echo "$ssm_output" | jq -r '.StandardErrorContent')
+
             echo "Status: $status"
             echo "Standard Output: $stdout"
             echo "Standard Error: $stderr"
+
             if [ "$status" != "Success" ]; then
               echo "Schema upload or Swagger UI startup failed"
               exit 1
