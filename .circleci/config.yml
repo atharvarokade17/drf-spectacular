@@ -20,21 +20,19 @@ jobs:
           name: Upload schema and Start Swagger UI via single SSM command
           command: |
             FILE_CONTENT=$(base64 -w 0 schema.yaml)
+
+            # Send a single SSM command to handle both schema upload and Swagger UI startup
             command_id=$(aws ssm send-command \
               --instance-ids "$EC2_INSTANCE_ID" \
               --document-name "AWS-RunShellScript" \
               --comment "Upload schema.yaml and start Swagger UI" \
-              --parameters 'commands=[
-                "set -e",
-                "mkdir -p /home/ubuntu/swagger",
-                "echo '"$FILE_CONTENT"' | base64 -d > /home/ubuntu/swagger/schema.yaml",
-                "docker rm -f swagger-ui || true",
-                "docker run -d -p 8080:8080 \
-                  -e SWAGGER_JSON=/schema.yaml \
-                  -v /home/ubuntu/swagger/schema.yaml:/schema.yaml \
-                  --name swagger-ui \
-                  swaggerapi/swagger-ui"
-              ]' \
+              --parameters "commands=[
+                \"set -e\",
+                \"mkdir -p /home/ubuntu/swagger\",
+                \"echo $FILE_CONTENT | base64 -d > /home/ubuntu/swagger/schema.yaml\",
+                \"docker rm -f swagger-ui || true\",
+                \"docker run -d -p 8080:8080 -e SWAGGER_JSON=/schema.yaml -v /home/ubuntu/swagger/schema.yaml:/schema.yaml --name swagger-ui swaggerapi/swagger-ui\"
+              ]" \
               --region $AWS_REGION \
               --query 'Command.CommandId' --output text)
 
