@@ -17,10 +17,12 @@ jobs:
           name: Generate Schema
           command: make dev
       - run:
+          name: Create temporary base64 file
+          command: |
+            base64 -w 0 schema.yaml > /tmp/schema.b64
+      - run:
           name: Upload schema and Start Swagger UI via single SSM command
           command: |
-            FILE_CONTENT=$(base64 -w 0 schema.yaml)
-
             command_id=$(aws ssm send-command \
               --instance-ids "$EC2_INSTANCE_ID" \
               --document-name "AWS-RunShellScript" \
@@ -28,7 +30,7 @@ jobs:
               --parameters "commands=[
                 \"set -e\",
                 \"mkdir -p /home/ubuntu/swagger\",
-                \"echo $FILE_CONTENT | base64 -d > /home/ubuntu/swagger/schema.yaml\",
+                \"base64 -d /tmp/schema.b64 > /home/ubuntu/swagger/schema.yaml\",
                 \"docker rm -f swagger-ui || true\",
                 \"docker run -d -p 8080:8080 -e SWAGGER_JSON=/schema.yaml -v /home/ubuntu/swagger/schema.yaml:/schema.yaml --name swagger-ui swaggerapi/swagger-ui\"
               ]" \
