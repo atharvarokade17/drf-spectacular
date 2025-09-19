@@ -68,6 +68,7 @@ jobs:
             if [ "$status" != "Success" ]; then
               echo "Schema upload or Swagger UI startup failed"
               exit 1
+            fi  
 
 workflows:
   version: 2
