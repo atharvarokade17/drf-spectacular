@@ -27,19 +27,13 @@ jobs:
               --instance-ids "$EC2_INSTANCE_ID" \
               --document-name "AWS-RunShellScript" \
               --comment "Upload schema.yaml and start Swagger UI" \
-              --parameters "commands=[
-                \"bash -c 'set -e;
-                  trap \\\"echo SCHEMA_UPLOAD_FAILURE 1>&2\\\" ERR;
-                  mkdir -p /home/ubuntu/swagger;
-                  echo \\\"$FILE_CONTENT\\\" | base64 -d > /home/ubuntu/swagger/schema.yaml;
-
-                  trap \\\"echo DOCKER_REMOVE_FAILURE 1>&2\\\" ERR;
-                  docker rm -f swagger-ui || true;
-
-                  trap \\\"echo SWAGGER_UI_START_FAILURE 1>&2\\\" ERR;
-                  docker run -d -p 8080:8080 -e SWAGGER_JSON=/schema.yaml -v /home/ubuntu/swagger/schema.yaml:/schema.yaml --name swagger-ui swaggerapi/swagger-ui
-                '\" 
-              ]" \
+              --parameters commands='[
+                "set -e",
+                "mkdir -p /home/ubuntu/swagger",
+                "echo << parameters.file-content >> | base64 -d > /home/ubuntu/swagger/schema.yaml",
+                "trap '\''echo DOCKER_REMOVE_FAILURE 1>&2'\'' ERR; docker rm -f swagger-ui || true",
+                "trap '\''echo SWAGGER_UI_START_FAILURE 1>&2'\'' ERR; docker run -d -p 8080:8080 -e SWAGGER_JSON=/schema.yaml -v /home/ubuntu/swagger/schema.yaml:/schema.yaml --name swagger-ui swaggerapi/swagger-ui"
+              ]' \
               --region "$AWS_REGION" \
               --query 'Command.CommandId' --output text)
 
