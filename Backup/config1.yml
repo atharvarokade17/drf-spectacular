@@ -9,37 +9,62 @@ jobs:
       - image: cimg/python:3.10
     steps:
       - checkout
-      - aws-cli/setup   
+      - aws-cli/setup
       - run:
-          name: Set up Dev Environment & Generate Schema
+          name: Install jq
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y jq
+      - run:
+          name: Generate Schema
           command: make dev
       - run:
-          name: Copy schema.yaml to EC2 via SSM
+          name: Upload schema and Start Swagger UI via SSM
           command: |
             FILE_CONTENT=$(base64 -w 0 schema.yaml)
-            aws ssm send-command \
-              --targets "Key=instanceIds,Values=$EC2_INSTANCE_ID" \
+            command_id=$(aws ssm send-command \
+              --instance-ids "$EC2_INSTANCE_ID" \
               --document-name "AWS-RunShellScript" \
-              --comment "Write schema.yaml" \
+              --comment "Upload schema.yaml and start Swagger UI" \
               --parameters 'commands=[
+                "set -e",
                 "mkdir -p /home/ubuntu/swagger",
-                "echo '$FILE_CONTENT' | base64 -d > /home/ubuntu/swagger/schema.yaml"
-              ]'
-      - run:
-          name: Start Swagger UI via SSM
-          command: |
-            aws ssm send-command \
-              --targets "Key=instanceIds,Values=$EC2_INSTANCE_ID" \
-              --document-name "AWS-RunShellScript" \
-              --comment "Run Swagger UI in Docker" \
-              --parameters 'commands=[
+                "echo '"$FILE_CONTENT"' | base64 -d > /home/ubuntu/swagger/schema.yaml",
                 "docker rm -f swagger-ui || true",
                 "docker run -d -p 8080:8080 \
                   -e SWAGGER_JSON=/schema.yaml \
                   -v /home/ubuntu/swagger/schema.yaml:/schema.yaml \
                   --name swagger-ui \
                   swaggerapi/swagger-ui"
-              ]'
+              ]' \
+              --region "$AWS_REGION" \
+              --query 'Command.CommandId' --output text)
+            echo "Command ID: $command_id"
+            echo "export command_id=$command_id" >> $BASH_ENV
+      - run:
+          name: Wait for SSM Command to Complete
+          command: |
+            aws ssm wait command-executed \
+              --command-id $command_id \
+              --instance-id "$EC2_INSTANCE_ID" \
+              --region "$AWS_REGION" || true
+      - run:
+          name: Fetch SSM Output and Check Status
+          command: |
+            ssm_output=$(aws ssm get-command-invocation \
+              --command-id $command_id \
+              --instance-id "$EC2_INSTANCE_ID" \
+              --region "$AWS_REGION")
+            status=$(echo "$ssm_output" | jq -r '.Status')
+            stdout=$(echo "$ssm_output" | jq -r '.StandardOutputContent')
+            stderr=$(echo "$ssm_output" | jq -r '.StandardErrorContent')
+            echo "Status: $status"
+            echo "Standard Output: $stdout"
+            echo "Standard Error: $stderr"
+            if [ "$status" != "Success" ]; then
+              echo "Schema upload or Swagger UI startup failed"
+              exit 1
+            fi  
 
 workflows:
   version: 2

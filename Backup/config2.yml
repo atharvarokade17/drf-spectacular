@@ -12,97 +12,62 @@ jobs:
       - aws-cli/setup
       - run:
           name: Install jq
-          command: sudo apt-get update && sudo apt-get install -y jq
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y jq
       - run:
           name: Generate Schema
           command: make dev
       - run:
-          name: Upload schema.yaml to EC2 via SSM
+          name: Upload Schema and Start Swagger UI via SSM
           command: |
             FILE_CONTENT=$(base64 -w 0 schema.yaml)
-
             command_id=$(aws ssm send-command \
               --instance-ids "$EC2_INSTANCE_ID" \
               --document-name "AWS-RunShellScript" \
-              --comment "Upload schema.yaml" \
-              --parameters 'commands=[
-                "set -e",
-                "mkdir -p /home/ubuntu/swagger",
-                "echo '"$FILE_CONTENT"' | base64 -d > /home/ubuntu/swagger/schema.yaml"
-              ]' \
-              --region $AWS_REGION \
+              --comment "Upload schema.yaml and start Swagger UI" \
+              --parameters "commands=[
+                \"bash -c 'set -e;
+                  trap \\\"echo SCHEMA_UPLOAD_FAILURE 1>&2\\\" ERR;
+                  mkdir -p /home/ubuntu/swagger;
+                  echo \\\"$FILE_CONTENT\\\" | base64 -d > /home/ubuntu/swagger/schema.yaml;
+                  trap \\\"echo DOCKER_REMOVE_FAILURE 1>&2\\\" ERR;
+                  docker rm -f swagger-ui || true;
+                  trap \\\"echo SWAGGER_UI_START_FAILURE 1>&2\\\" ERR;
+                  docker run -d -p 8080:8080 -e SWAGGER_JSON=/schema.yaml -v /home/ubuntu/swagger/schema.yaml:/schema.yaml --name swagger-ui swaggerapi/swagger-ui
+                '\" 
+              ]" \
+              --region "$AWS_REGION" \
               --query 'Command.CommandId' --output text)
-
             echo "Command ID: $command_id"
-            echo "export command_id_upload=$command_id" >> $BASH_ENV
+            echo "export command_id=$command_id" >> $BASH_ENV
       - run:
-          name: Wait for schema upload completion
+          name: Wait for SSM Command to Complete
           command: |
             aws ssm wait command-executed \
-              --command-id $command_id_upload \
+              --command-id $command_id \
               --instance-id "$EC2_INSTANCE_ID" \
-              --region $AWS_REGION || true
-
-            ssm_output=$(aws ssm get-command-invocation \
-              --command-id $command_id_upload \
-              --instance-id "$EC2_INSTANCE_ID" \
-              --region $AWS_REGION)
-
-            status=$(echo "$ssm_output" | jq -r '.Status')
-            echo "Upload Status: $status"
-            if [ "$status" != "Success" ]; then
-              echo "Schema upload failed"
-              exit 1
-            fi
+              --region "$AWS_REGION" || true
       - run:
-          name: Start Swagger UI via SSM
+          name: Fetch SSM Output and Check Status
           command: |
-            command_id=$(aws ssm send-command \
-              --instance-ids "$EC2_INSTANCE_ID" \
-              --document-name "AWS-RunShellScript" \
-              --comment "Start Swagger UI" \
-              --parameters 'commands=[
-                "set -e",
-                "docker rm -f swagger-ui || true",
-                "docker run -d -p 8080:8080 \
-                  -e SWAGGER_JSON=/schema.yaml \
-                  -v /home/ubuntu/swagger/schema.yaml:/schema.yaml \
-                  --name swagger-ui \
-                  swaggerapi/swagger-ui"
-              ]' \
-              --region $AWS_REGION \
-              --query 'Command.CommandId' --output text)
-
-            echo "Command ID: $command_id"
-            echo "export command_id_swagger=$command_id" >> $BASH_ENV
-      - run:
-          name: Wait for Swagger UI startup
-          command: |
-            aws ssm wait command-executed \
-              --command-id $command_id_swagger \
-              --instance-id "$EC2_INSTANCE_ID" \
-              --region $AWS_REGION || true
-
             ssm_output=$(aws ssm get-command-invocation \
-              --command-id $command_id_swagger \
+              --command-id $command_id \
               --instance-id "$EC2_INSTANCE_ID" \
-              --region $AWS_REGION)
-
+              --region "$AWS_REGION")
             status=$(echo "$ssm_output" | jq -r '.Status')
             stdout=$(echo "$ssm_output" | jq -r '.StandardOutputContent')
             stderr=$(echo "$ssm_output" | jq -r '.StandardErrorContent')
-
-            echo "Swagger UI Status: $status"
+            echo "Status: $status"
             echo "Standard Output: $stdout"
             echo "Standard Error: $stderr"
-
             if [ "$status" != "Success" ]; then
-              echo "Swagger UI startup failed"
+              echo "Schema upload or Swagger UI startup failed"
               exit 1
-            fi
+            fi  
 
 workflows:
   version: 2
   deploy-swagger-ui:
     jobs:
-      - generate-and-deploy-schema          
+      - generate-and-deploy-schema

@@ -6,7 +6,7 @@ orbs:
 jobs:
   generate-and-deploy-schema:
     docker:
-      - image: cimg/python:3.10
+      - image: cimg/base:2024.02
     steps:
       - checkout
       - aws-cli/setup
@@ -16,29 +16,44 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y jq
       - run:
-          name: Generate Schema
-          command: make dev
-      - run:
-          name: Upload schema and Start Swagger UI via SSM
+          name: Set Key and Generate Schema
           command: |
-            FILE_CONTENT=$(base64 -w 0 schema.yaml)
+            # Export key for OpenAPI spec generation
+            export OPENAPI_SPEC_GEN=true
+            echo "OPENAPI_SPEC_GEN=$OPENAPI_SPEC_GEN" >> $BASH_ENV
+            make dev
+      - run:
+          name: Upload Swagger files and Compose via SSM
+          command: |
+            # Base64 encode files for upload
+            SCHEMA_FILE=$(base64 -w 0 schema.yaml)
+            COMPOSE_FILE=$(base64 -w 0 swagger-compose.yml)
+            SAAS_FILE=$(base64 -w 0 specs/saas.yml)
+            IIFL_FILE=$(base64 -w 0 specs/iifl.yml)
+
             command_id=$(aws ssm send-command \
               --instance-ids "$EC2_INSTANCE_ID" \
               --document-name "AWS-RunShellScript" \
-              --comment "Upload schema.yaml and start Swagger UI" \
-              --parameters 'commands=[
-                "set -e",
-                "mkdir -p /home/ubuntu/swagger",
-                "echo '"$FILE_CONTENT"' | base64 -d > /home/ubuntu/swagger/schema.yaml",
-                "docker rm -f swagger-ui || true",
-                "docker run -d -p 8080:8080 \
-                  -e SWAGGER_JSON=/schema.yaml \
-                  -v /home/ubuntu/swagger/schema.yaml:/schema.yaml \
-                  --name swagger-ui \
-                  swaggerapi/swagger-ui"
-              ]' \
+              --comment "Upload Swagger files and start via Docker Compose" \
+              --parameters "commands=[
+                \"bash -c 'set -e;
+                  trap \\\"echo SCHEMA_UPLOAD_FAILURE 1>&2\\\" ERR;
+                  mkdir -p /home/ubuntu/swagger/specs;
+                  echo \\\"$SCHEMA_FILE\\\"  | base64 -d > /home/ubuntu/swagger/specs/schema.yaml;
+                  echo \\\"$SAAS_FILE\\\"    | base64 -d > /home/ubuntu/swagger/specs/saas.yml;
+                  echo \\\"$IIFL_FILE\\\"    | base64 -d > /home/ubuntu/swagger/specs/iifl.yml;
+                  trap \\\"echo COMPOSE_UPLOAD_FAILURE 1>&2\\\" ERR;
+                  echo \\\"$COMPOSE_FILE\\\" | base64 -d > /home/ubuntu/swagger/swagger-compose.yml;
+                  cd /home/ubuntu/swagger;
+                  trap \\\"echo DOCKER_COMPOSE_DOWN_FAILURE 1>&2\\\" ERR;
+                  docker compose -f swagger-compose.yml down || true;
+                  trap \\\"echo DOCKER_COMPOSE_UP_FAILURE 1>&2\\\" ERR;
+                  docker compose -f swagger-compose.yml up -d;
+                '\" 
+              ]" \
               --region "$AWS_REGION" \
               --query 'Command.CommandId' --output text)
+
             echo "Command ID: $command_id"
             echo "export command_id=$command_id" >> $BASH_ENV
       - run:
@@ -62,7 +77,7 @@ jobs:
             echo "Standard Output: $stdout"
             echo "Standard Error: $stderr"
             if [ "$status" != "Success" ]; then
-              echo "Schema upload or Swagger UI startup failed"
+              echo "Swagger UI deployment failed"
               exit 1
             fi  
 
