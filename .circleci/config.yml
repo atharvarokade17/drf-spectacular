@@ -6,7 +6,7 @@ orbs:
 jobs:
   generate-and-deploy-schema:
     docker:
-      - image: cimg/base:2024.02
+      - image: cimg/python:3.10
     steps:
       - checkout
       - aws-cli/setup
@@ -21,7 +21,6 @@ jobs:
       - run:
           name: Upload Schema and Start Swagger UI via SSM
           command: |
-            FILE_CONTENT=$(base64 -w 0 schema.yaml)
             command_id=$(aws ssm send-command \
               --instance-ids "$EC2_INSTANCE_ID" \
               --document-name "AWS-RunShellScript" \
