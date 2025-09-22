@@ -21,6 +21,7 @@ jobs:
       - run:
           name: Upload Schema and Start Swagger UI via SSM
           command: |
+            FILE_CONTENT=$(base64 -w 0 schema.yaml)
             command_id=$(aws ssm send-command \
               --instance-ids "$EC2_INSTANCE_ID" \
               --document-name "AWS-RunShellScript" \
